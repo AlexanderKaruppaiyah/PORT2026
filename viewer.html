@@ -1,0 +1,1363 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MongoDB Collection Viewer</title>
+    
+    <!-- Tailwind CSS via CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Font Awesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Custom styles to complement Tailwind -->
+    <style>
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 10px;
+        }
+        
+        ::-webkit-scrollbar-thumb {
+            background: #888;
+            border-radius: 10px;
+        }
+        
+        ::-webkit-scrollbar-thumb:hover {
+            background: #555;
+        }
+        
+        /* Loading animation */
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        
+        .animate-pulse-custom {
+            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+        
+        /* Modal animation */
+        .modal-enter {
+            animation: fadeIn 0.3s ease-out;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: scale(0.95); }
+            to { opacity: 1; transform: scale(1); }
+        }
+        
+        /* Image styles */
+        .payment-screenshot {
+            margin-top: 2rem;
+            padding: 1rem;
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+        }
+
+        .payment-screenshot h4 {
+            margin-bottom: 1rem;
+            color: #2c3e50;
+            font-size: 1.1rem;
+        }
+
+        .screenshot-container {
+            max-width: 100%;
+            overflow-x: auto;
+            text-align: center;
+        }
+
+        .screenshot-container img {
+            max-width: 100%;
+            max-height: 500px;
+            border-radius: 4px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        .screenshot-container img:hover {
+            transform: scale(1.02);
+        }
+
+        .screenshot-actions {
+            margin-top: 1rem;
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+        }
+
+        .screenshot-actions button {
+            padding: 0.5rem 1rem;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.875rem;
+            transition: background-color 0.2s;
+        }
+
+        .btn-download {
+            background-color: #28a745;
+            color: white;
+        }
+
+        .btn-download:hover {
+            background-color: #218838;
+        }
+
+        .btn-view {
+            background-color: #007bff;
+            color: white;
+        }
+
+        .btn-view:hover {
+            background-color: #0056b3;
+        }
+
+        /* Modal for enlarged image */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.9);
+            overflow: auto;
+        }
+
+        .modal-content {
+            margin: auto;
+            display: block;
+            max-width: 90%;
+            max-height: 90%;
+            position: relative;
+            top: 50%;
+            transform: translateY(-50%);
+        }
+
+        .close-modal {
+            position: absolute;
+            top: 20px;
+            right: 35px;
+            color: #f1f1f1;
+            font-size: 40px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .close-modal:hover {
+            color: #bbb;
+        }
+    </style>
+</head>
+
+<body class="bg-gray-100 h-screen overflow-hidden">
+    <div id="app" class="h-screen flex flex-col">
+        
+        <!-- Header with Tailwind styling -->
+        <header class="bg-gradient-to-r from-gray-800 to-gray-900 text-white px-6 py-4 flex items-center gap-4 shadow-lg">
+            <div class="flex gap-3 items-center flex-wrap">
+                <div class="relative">
+                    <i class="fas fa-database absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 text-sm"></i>
+                    <select class="database-select pl-9 pr-4 py-2 rounded-lg border border-gray-600 bg-gray-700 text-white focus:ring-2 focus:ring-blue-500 focus:outline-none appearance-none cursor-pointer min-w-[200px]" 
+                            id="databaseSelect" onchange="handleDatabaseChange(this.value)">
+                        <option value="" class="bg-gray-700">Select Database</option>
+                    </select>
+                </div>
+
+                <div class="relative">
+                    <i class="fas fa-table absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 text-sm"></i>
+                    <select class="collection-select pl-9 pr-4 py-2 rounded-lg border border-gray-600 bg-gray-700 text-white focus:ring-2 focus:ring-blue-500 focus:outline-none appearance-none cursor-pointer min-w-[200px] disabled:opacity-50 disabled:cursor-not-allowed" 
+                            id="collectionSelect" onchange="handleCollectionChange(this.value)" disabled>
+                        <option value="" class="bg-gray-700">Select Collection</option>
+                    </select>
+                </div>
+            </div>
+            
+            <h1 class="text-xl font-semibold flex-1">
+                <i class="fas fa-database mr-2 text-blue-400"></i>
+                MongoDB Collection Viewer
+            </h1>
+            
+            <div class="flex gap-3 items-center">
+                <button class="download-all-btn bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-all transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 shadow-md" 
+                        id="downloadAllBtn" onclick="downloadAllCollections()" disabled>
+                    <i class="fas fa-layer-group"></i>
+                    <span class="hidden sm:inline">All Tables</span>
+                </button>
+                
+                <button class="download-btn bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-all transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 shadow-md" 
+                        id="downloadBtn" onclick="downloadCurrentCollection()" disabled>
+                    <i class="fas fa-download"></i>
+                    <span class="hidden sm:inline">Current Table</span>
+                </button>
+                
+                <div id="connectionStatus" class="connection-status px-3 py-1 rounded-full text-xs font-medium flex items-center gap-1 bg-red-600 text-white">
+                    <i class="fas fa-circle text-[8px] mr-1 animate-pulse"></i>
+                    Disconnected
+                </div>
+            </div>
+        </header>
+
+        <!-- Main content with Tailwind grid -->
+        <div class="flex-1 flex overflow-hidden">
+            
+            <!-- Left sidebar with Tailwind -->
+            <aside class="w-80 bg-white border-r border-gray-200 flex flex-col overflow-hidden shadow-lg">
+                <div class="sidebar-header p-4 bg-gray-50 border-b border-gray-200 flex justify-between items-center">
+                    <h3 class="font-semibold text-gray-700 flex items-center gap-2" id="collectionTitle">
+                        <i class="fas fa-users text-blue-500"></i>
+                        Candidates
+                    </h3>
+                    <span id="candidateCount" class="candidate-count bg-blue-600 text-white px-2 py-1 rounded-full text-xs font-medium">
+                        0
+                    </span>
+                </div>
+                
+                <div id="loadingCandidates" class="loading hidden flex-col items-center justify-center p-8 text-gray-500">
+                    <div class="loading-spinner w-10 h-10 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin mb-3"></div>
+                    <div class="text-sm">Loading candidates...</div>
+                </div>
+                
+                <ul class="candidate-list flex-1 overflow-y-auto divide-y divide-gray-200" id="candidateList"></ul>
+            </aside>
+
+            <!-- Right content area with Tailwind -->
+            <main class="content flex-1 p-6 overflow-y-auto bg-gray-50" id="contentArea">
+                <div id="placeholder" class="placeholder bg-white rounded-xl shadow-sm p-12 text-center border-2 border-dashed border-gray-300">
+                    <div class="placeholder-icon text-6xl mb-4 text-gray-400">
+                        <i class="fas fa-database"></i>
+                    </div>
+                    <div class="text-xl text-gray-600 mb-2">Select a database and collection</div>
+                    <div class="text-sm text-gray-500 opacity-70">
+                        Then click on a candidate to see their details
+                    </div>
+                </div>
+                
+                <div id="candidateDetails" class="hidden"></div>
+                <div id="errorMessage" class="error hidden bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg mb-4" role="alert"></div>
+            </main>
+        </div>
+    </div>
+
+    <!-- Progress Modal with Tailwind -->
+    <div id="progressModal" class="progress-container hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div class="bg-white rounded-xl shadow-2xl p-6 max-w-md w-full mx-4 modal-enter">
+            <div class="flex items-center gap-3 mb-4">
+                <div class="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
+                    <i class="fas fa-spinner fa-spin text-blue-600 text-xl"></i>
+                </div>
+                <h3 class="text-lg font-semibold text-gray-800" id="progressText">Processing...</h3>
+            </div>
+            
+            <div class="progress-bar w-full h-3 bg-gray-200 rounded-full overflow-hidden mb-3">
+                <div class="progress-fill h-full bg-gradient-to-r from-blue-500 to-green-500 transition-all duration-300" id="progressFill" style="width: 0%"></div>
+            </div>
+            
+            <p class="text-sm text-gray-600 text-center" id="progressDetail"></p>
+            
+            <div class="mt-4 text-xs text-gray-400 text-center">
+                <i class="fas fa-hourglass-half mr-1"></i>
+                Please wait while we process your data
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal for image viewing -->
+    <div id="imageModal" class="modal" onclick="closeModal()">
+        <span class="close-modal">&times;</span>
+        <img class="modal-content" id="modalImage">
+    </div>
+
+    <!-- SheetJS library for Excel export -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+    <script>
+        // Configuration
+        const API_BASE_URL = 'http://localhost:5000/api'; // Update this with your backend URL
+
+        // State management
+        let state = {
+            databases: [],
+            collections: [],
+            selectedDb: '',
+            selectedCollection: '',
+            documents: [],
+            selectedDocument: null,
+            documentDetails: null,
+            loading: false,
+            error: null,
+            connectionStatus: 'disconnected'
+        };
+
+        // DOM Elements
+        const databaseSelect = document.getElementById('databaseSelect');
+        const collectionSelect = document.getElementById('collectionSelect');
+        const collectionTitle = document.getElementById('collectionTitle');
+        const candidateList = document.getElementById('candidateList');
+        const candidateCount = document.getElementById('candidateCount');
+        const contentArea = document.getElementById('contentArea');
+        const placeholder = document.getElementById('placeholder');
+        const candidateDetailsDiv = document.getElementById('candidateDetails');
+        const errorMessageDiv = document.getElementById('errorMessage');
+        const loadingCandidates = document.getElementById('loadingCandidates');
+        const connectionStatus = document.getElementById('connectionStatus');
+        const downloadBtn = document.getElementById('downloadBtn');
+        const downloadAllBtn = document.getElementById('downloadAllBtn');
+        const imageModal = document.getElementById('imageModal');
+        const modalImage = document.getElementById('modalImage');
+        const progressModal = document.getElementById('progressModal');
+        const progressText = document.getElementById('progressText');
+        const progressFill = document.getElementById('progressFill');
+        const progressDetail = document.getElementById('progressDetail');
+
+        // Helper function to format collection names
+        function formatCollectionName(name) {
+            if (!name) return '';
+            
+            // Handle camelCase (e.g., "userProfiles" -> "User Profiles")
+            let formatted = name
+                .replace(/([A-Z])/g, ' $1') // Add space before capital letters
+                .replace(/_/g, ' ') // Replace underscores with spaces
+                .replace(/-/g, ' ') // Replace hyphens with spaces
+                .replace(/\s+/g, ' ') // Replace multiple spaces with single space
+                .trim();
+            
+            // Capitalize first letter of each word
+            formatted = formatted.split(' ').map(word => 
+                word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+            ).join(' ');
+            
+            return formatted;
+        }
+
+        // Get registration ID for sorting
+        function getRegistrationId(doc) {
+            // Try different possible field names for registration ID
+            const possibleFields = [
+                'registrationId', 'regId', 'registration_id', 'reg_id',
+                'id', '_id', 'studentId', 'candidateId', 'userId',
+                'regNumber', 'registrationNumber', 'reg_no', 'registerNumber'
+            ];
+            
+            for (const field of possibleFields) {
+                if (doc[field] !== undefined) {
+                    return doc[field];
+                }
+            }
+            
+            // If no registration ID found, return a default
+            return '';
+        }
+
+        // Sort documents by registration ID
+        function sortByRegistrationId(docs) {
+            return [...docs].sort((a, b) => {
+                const regA = String(getRegistrationId(a) || '');
+                const regB = String(getRegistrationId(b) || '');
+                return regA.localeCompare(regB, undefined, { numeric: true });
+            });
+        }
+
+        // Initialize the app
+        async function init() {
+            updateConnectionStatus('connecting');
+            await fetchDatabases();
+        }
+
+        // Update connection status
+        function updateConnectionStatus(status) {
+            state.connectionStatus = status;
+            
+            if (status === 'connected') {
+                connectionStatus.className = 'connection-status px-3 py-1 rounded-full text-xs font-medium flex items-center gap-1 bg-green-600 text-white';
+                connectionStatus.innerHTML = '<i class="fas fa-circle text-[8px] mr-1 text-green-300"></i> Connected';
+            } else {
+                connectionStatus.className = 'connection-status px-3 py-1 rounded-full text-xs font-medium flex items-center gap-1 bg-red-600 text-white';
+                connectionStatus.innerHTML = '<i class="fas fa-circle text-[8px] mr-1 animate-pulse"></i> Disconnected';
+            }
+        }
+
+        // Fetch all databases
+        async function fetchDatabases() {
+            try {
+                const response = await fetch(`${API_BASE_URL}/databases`);
+                if (!response.ok) throw new Error('Failed to fetch databases');
+                const data = await response.json();
+                state.databases = data;
+                renderDatabaseDropdown();
+                updateConnectionStatus('connected');
+            } catch (error) {
+                showError('Error fetching databases: ' + error.message);
+                updateConnectionStatus('disconnected');
+            }
+        }
+
+        // Render database dropdown
+        function renderDatabaseDropdown() {
+            databaseSelect.innerHTML = '<option value="" class="bg-gray-700">Select Database</option>';
+            state.databases.forEach(db => {
+                const option = document.createElement('option');
+                option.value = db;
+                option.textContent = db;
+                option.className = 'bg-gray-700';
+                databaseSelect.appendChild(option);
+            });
+        }
+
+        // Handle database selection
+async function handleDatabaseChange(dbName) {
+    // Stop auto-refresh when changing databases
+    stopAutoRefresh();
+    
+    state.selectedDb = dbName;
+    state.selectedCollection = '';
+    state.documents = [];
+    state.selectedDocument = null;
+    state.documentDetails = null;
+    state.error = null;
+
+    // Reset UI
+    collectionSelect.disabled = !dbName;
+    collectionSelect.innerHTML = '<option value="" class="bg-gray-700">Select Collection</option>';
+    clearCandidateList();
+    hideError();
+    hideCandidateDetails();
+    showPlaceholder();
+    downloadBtn.disabled = true;
+    downloadAllBtn.disabled = !dbName;
+
+    if (dbName) {
+        await fetchCollections(dbName);
+    } else {
+        showPlaceholder('Please select a database to view collections');
+        downloadAllBtn.disabled = true;
+    }
+}
+
+        // Fetch collections for selected database
+        async function fetchCollections(dbName) {
+            showLoading();
+
+            try {
+                const response = await fetch(`${API_BASE_URL}/databases/${dbName}/collections`);
+                if (!response.ok) throw new Error('Failed to fetch collections');
+
+                const data = await response.json();
+                state.collections = data;
+                renderCollectionDropdown();
+            } catch (error) {
+                showError('Error fetching collections: ' + error.message);
+            } finally {
+                hideLoading();
+            }
+        }
+
+        // Render collection dropdown with formatted names
+        function renderCollectionDropdown() {
+            collectionSelect.innerHTML = '<option value="" class="bg-gray-700">Select Collection</option>';
+            state.collections.forEach(collection => {
+                const option = document.createElement('option');
+                option.value = collection;
+                option.textContent = formatCollectionName(collection);
+                option.className = 'bg-gray-700';
+                collectionSelect.appendChild(option);
+            });
+        }
+
+       // Handle collection selection
+async function handleCollectionChange(collectionName) {
+    // Stop auto-refresh when changing collections
+    stopAutoRefresh();
+    
+    state.selectedCollection = collectionName;
+    state.selectedDocument = null;
+    state.documentDetails = null;
+
+    const formattedName = formatCollectionName(collectionName);
+    collectionTitle.innerHTML = `<i class="fas fa-table text-blue-500 mr-2"></i>${formattedName || 'Candidates'}`;
+
+    if (collectionName) {
+        await fetchDocuments(state.selectedDb, collectionName);
+        downloadBtn.disabled = false;
+    } else {
+        clearCandidateList();
+        showPlaceholder('Please select a collection to view documents');
+        downloadBtn.disabled = true;
+    }
+}
+       // Fetch documents for selected collection
+async function fetchDocuments(dbName, collectionName) {
+    showLoading();
+    clearCandidateList();
+    hidePlaceholder();
+
+    try {
+        const response = await fetch(
+            `${API_BASE_URL}/databases/${dbName}/collections/${collectionName}/documents`
+        );
+        if (!response.ok) throw new Error('Failed to fetch documents');
+
+        const data = await response.json();
+        state.documents = sortByRegistrationId(data);
+        renderDocumentList();
+
+        // Update collection title with count
+        const formattedName = formatCollectionName(collectionName);
+        collectionTitle.innerHTML = `<i class="fas fa-table text-blue-500 mr-2"></i>${formattedName} <span class="text-sm font-normal text-gray-500 ml-2">(${state.documents.length})</span>`;
+        candidateCount.textContent = state.documents.length;
+
+        // 🔄 AUTO-REFRESH: Set up automatic refresh every 30 seconds
+        startAutoRefresh(dbName, collectionName);
+
+    } catch (error) {
+        showError('Error fetching documents: ' + error.message);
+    } finally {
+        hideLoading();
+    }
+}
+
+        // Render document list
+        function renderDocumentList() {
+            candidateList.innerHTML = '';
+
+            if (state.documents.length === 0) {
+                candidateList.innerHTML = '<li class="no-data p-8 text-center text-gray-500 italic">No documents found in this collection</li>';
+                return;
+            }
+
+            state.documents.forEach(doc => {
+                const li = document.createElement('li');
+                li.className = `candidate-item p-4 border-b border-gray-200 cursor-pointer transition-all hover:bg-blue-50 hover:pl-6 ${state.selectedDocument?._id === doc._id ? 'selected bg-blue-600 text-white hover:bg-blue-700' : ''}`;
+
+                // Try to find name or email fields
+                const name = doc.firstName || doc.fullName || doc.candidateName || doc.title || doc.name || 'Unnamed';
+                const email = doc.email || doc.mail || doc.contact || '';
+                const regId = getRegistrationId(doc);
+
+                li.innerHTML = `
+                    <div class="flex justify-between items-start">
+                        <span class="candidate-name font-medium">${name}</span>
+                        ${regId ? `<span class="text-xs px-2 py-1 bg-gray-200 rounded-full ${state.selectedDocument?._id === doc._id ? 'bg-blue-500 text-white' : ''}">${String(regId).substring(0, 8)}</span>` : ''}
+                    </div>
+                    ${email ? `<span class="candidate-email text-sm opacity-80 block mt-1">${email}</span>` : ''}
+                    <small class="text-xs opacity-60 block mt-1">ID: ${doc._id.toString().substring(0, 8)}...</small>
+                `;
+
+                li.onclick = () => handleDocumentClick(doc);
+                candidateList.appendChild(li);
+            });
+        }
+
+        // Handle document selection
+        async function handleDocumentClick(doc) {
+            state.selectedDocument = doc;
+            renderDocumentList(); // Re-render to update selected state
+            await fetchDocumentDetails(doc._id);
+        }
+
+        // Fetch document details
+        async function fetchDocumentDetails(documentId) {
+            showLoading();
+            hidePlaceholder();
+
+            try {
+                const response = await fetch(
+                    `${API_BASE_URL}/databases/${state.selectedDb}/collections/${state.selectedCollection}/documents/${documentId}`
+                );
+
+                if (!response.ok) throw new Error('Failed to fetch document details');
+
+                const data = await response.json();
+                state.documentDetails = data;
+                renderDocumentDetails();
+            } catch (error) {
+                showError('Error fetching document details: ' + error.message);
+            } finally {
+                hideLoading();
+            }
+        }
+
+        // Helper function to check if a field contains an image
+        function isImageField(key, value) {
+            const imageKeywords = ['screenshot', 'image', 'photo', 'picture', 'img', 'payment', 'receipt', 'signature', 'photo', 'avatar', 'profile'];
+            const lowerKey = key.toLowerCase();
+            
+            // Check if key contains image-related words
+            const isImageKey = imageKeywords.some(keyword => lowerKey.includes(keyword));
+            
+            // Check if value looks like base64 image
+            const isBase64Image = typeof value === 'string' && (
+                value.startsWith('data:image') || 
+                value.startsWith('/9j/') || // JPEG base64 starts with /9j/
+                value.startsWith('iVBOR') || // PNG base64 starts with iVBOR
+                (value.length > 100 && /^[A-Za-z0-9+/=]+$/.test(value.substring(0, 100)))
+            );
+            
+            return isImageKey && isBase64Image;
+        }
+
+        // Check if value is base64 image
+        function isBase64Image(value) {
+            return typeof value === 'string' && (
+                value.startsWith('data:image') || 
+                value.startsWith('/9j/') || 
+                value.startsWith('iVBOR') ||
+                (value.length > 100 && /^[A-Za-z0-9+/=]+$/.test(value.substring(0, 100)))
+            );
+        }
+
+        // Find all image fields in the document
+        function findImageFields(document) {
+            const imageFields = [];
+            
+            Object.entries(document).forEach(([key, value]) => {
+                if (isImageField(key, value)) {
+                    imageFields.push({ key, value });
+                }
+            });
+            
+            return imageFields;
+        }
+
+        // Format field name for display
+        function formatFieldName(key) {
+            return key
+                .replace(/([A-Z])/g, ' $1') // Add spaces before capital letters
+                .replace(/_/g, ' ') // Replace underscores with spaces
+                .replace(/-/g, ' ') // Replace hyphens with spaces
+                .replace(/\s+/g, ' ') // Replace multiple spaces with single space
+                .replace(/\b\w/g, l => l.toUpperCase()) // Capitalize first letter of each word
+                .trim();
+        }
+
+        // Format value for display
+        function formatValueForDisplay(value) {
+            if (value === null) return '<em class="text-gray-400">null</em>';
+            if (value === undefined) return '<em class="text-gray-400">undefined</em>';
+            if (typeof value === 'object') {
+                return `<pre class="bg-gray-100 p-2 rounded text-xs overflow-x-auto">${JSON.stringify(value, null, 2)}</pre>`;
+            }
+            if (typeof value === 'boolean') {
+                return value ? 'Yes' : 'No';
+            }
+            if (typeof value === 'string' && value.length > 500) {
+                return value.substring(0, 500) + '... <em class="text-gray-400">(truncated)</em>';
+            }
+            return String(value);
+        }
+
+        // Get display name from document
+        function getDisplayName(doc) {
+            const nameFields = ['name', 'fullName', 'candidateName', 'title', 'firstName', 'firstname', 'full_name'];
+            for (const field of nameFields) {
+                if (doc[field]) return doc[field];
+            }
+            return 'Document Information';
+        }
+
+        // Render an image field
+        function renderImageField(fieldName, base64Data) {
+            // Ensure base64 data has the correct prefix
+            let imageSrc = base64Data;
+            if (!base64Data.startsWith('data:image')) {
+                // Try to detect image type
+                if (base64Data.startsWith('/9j/')) {
+                    imageSrc = 'data:image/jpeg;base64,' + base64Data;
+                } else if (base64Data.startsWith('iVBOR')) {
+                    imageSrc = 'data:image/png;base64,' + base64Data;
+                } else {
+                    imageSrc = 'data:image/png;base64,' + base64Data;
+                }
+            }
+            
+            return `
+                <div class="payment-screenshot bg-gray-50 border border-gray-200 rounded-lg p-4 mt-6">
+                    <h4 class="font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                        <i class="fas fa-image text-blue-500"></i>
+                        ${formatFieldName(fieldName)}
+                    </h4>
+                    <div class="screenshot-container text-center">
+                        <img 
+                            src="${imageSrc}" 
+                            alt="${fieldName}"
+                            onclick="openImageInModal('${imageSrc}')"
+                            class="max-w-full max-h-96 rounded-lg shadow-md cursor-pointer transition-transform hover:scale-105 mx-auto"
+                            onerror="this.onerror=null; this.src='data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'200\' height=\'200\' viewBox=\'0 0 200 200\'%3E%3Crect width=\'200\' height=\'200\' fill=\'%23f0f0f0\'/%3E%3Ctext x=\'50\' y=\'115\' font-family=\'Arial\' font-size=\'14\' fill=\'%23999\'%3EImage not%3C/text%3E%3Ctext x=\'45\' y=\'135\' font-family=\'Arial\' font-size=\'14\' fill=\'%23999\'%3Eavailable%3C/text%3E%3C/svg%3E';"
+                        >
+                    </div>
+                    <div class="screenshot-actions flex gap-3 justify-center mt-4">
+                        <button class="btn-download bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors" onclick="downloadImage('${imageSrc}', '${fieldName}')">
+                            <i class="fas fa-download"></i>
+                            Download
+                        </button>
+                        <button class="btn-view bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors" onclick="openImageInModal('${imageSrc}')">
+                            <i class="fas fa-expand"></i>
+                            View Full Size
+                        </button>
+                    </div>
+                </div>
+            `;
+        }
+
+        // Open image in modal
+        function openImageInModal(imageSrc) {
+            modalImage.src = imageSrc;
+            imageModal.style.display = 'block';
+        }
+
+        // Close modal
+        function closeModal() {
+            imageModal.style.display = 'none';
+        }
+
+        // Download image
+        function downloadImage(imageSrc, fieldName) {
+            const link = document.createElement('a');
+            link.download = `${fieldName.replace(/\s+/g, '_')}_${Date.now()}.png`;
+            link.href = imageSrc;
+            link.click();
+        }
+
+        // Show progress modal
+        function showProgress(message, detail = '') {
+            progressText.textContent = message;
+            progressDetail.textContent = detail;
+            progressFill.style.width = '0%';
+            progressModal.classList.remove('hidden');
+        }
+
+        // Update progress
+        function updateProgress(percent, detail) {
+            progressFill.style.width = percent + '%';
+            if (detail) progressDetail.textContent = detail;
+        }
+
+        // Hide progress modal
+        function hideProgress() {
+            progressModal.classList.add('hidden');
+        }
+
+       // Download current collection as Excel
+async function downloadCurrentCollection() {
+    if (!state.selectedCollection || state.documents.length === 0) {
+        alert('No data to export');
+        return;
+    }
+
+    try {
+        showProgress('Preparing Excel file...', `Exporting ${state.documents.length} records from ${formatCollectionName(state.selectedCollection)}`);
+        
+        // Prepare data for Excel
+        const excelData = [];
+        
+        // Add headers
+        if (state.documents.length > 0) {
+            // Filter out image fields and unwanted columns
+            const headers = Object.keys(state.documents[0]).filter(key => 
+                !isImageField(key, state.documents[0][key]) && 
+                !key.toLowerCase().includes('image') && 
+                !key.toLowerCase().includes('photo') && 
+                !key.toLowerCase().includes('screenshot') &&
+                !key.toLowerCase().includes('picture') &&
+                !key.toLowerCase().includes('img') &&
+                !key.toLowerCase().includes('base64')
+            );
+            excelData.push(headers.map(h => formatFieldName(h)));
+        }
+        
+        // Add data rows with proper handling (skip image data)
+        state.documents.forEach((doc, index) => {
+            const row = [];
+            // Filter out image fields
+            const filteredEntries = Object.entries(doc).filter(([key, value]) => 
+                !isImageField(key, value) && 
+                !key.toLowerCase().includes('image') && 
+                !key.toLowerCase().includes('photo') && 
+                !key.toLowerCase().includes('screenshot') &&
+                !key.toLowerCase().includes('picture') &&
+                !key.toLowerCase().includes('img') &&
+                !key.toLowerCase().includes('base64')
+            );
+            
+            filteredEntries.forEach(([key, value]) => {
+                let cellValue = '';
+                
+                if (value === null || value === undefined) {
+                    cellValue = '';
+                } 
+                else if (typeof value === 'object') {
+                    // For objects, check size
+                    const str = JSON.stringify(value);
+                    cellValue = str.length > 1000 ? str.substring(0, 1000) + '...' : str;
+                }
+                else if (typeof value === 'string') {
+                    // For strings, exclude if it's base64
+                    if (isBase64Image(value)) {
+                        cellValue = ''; // Skip image data completely
+                    } 
+                    else if (value.length > 32767) {
+                        cellValue = value.substring(0, 32760) + '...';
+                    }
+                    else {
+                        cellValue = value;
+                    }
+                }
+                else if (typeof value === 'boolean') {
+                    cellValue = value ? 'Yes' : 'No';
+                }
+                else {
+                    cellValue = String(value);
+                }
+                
+                row.push(cellValue);
+            });
+            
+            // Only add row if it has data
+            if (row.some(cell => cell !== '')) {
+                excelData.push(row);
+            }
+            
+            // Update progress
+            if (index % 10 === 0) {
+                updateProgress(Math.round((index + 1) / state.documents.length * 100));
+            }
+        });
+
+        // Create workbook
+        const wb = XLSX.utils.book_new();
+        const ws = XLSX.utils.aoa_to_sheet(excelData);
+        
+        // Auto-size columns
+        const colWidths = [];
+        excelData.forEach(row => {
+            row.forEach((cell, i) => {
+                const length = String(cell).length;
+                colWidths[i] = Math.min(Math.max(colWidths[i] || 0, length), 50);
+            });
+        });
+        ws['!cols'] = colWidths.map(w => ({ wch: w + 2 }));
+        
+        const sheetName = formatCollectionName(state.selectedCollection).substring(0, 31);
+        XLSX.utils.book_append_sheet(wb, ws, sheetName);
+        
+        // Generate filename
+        const fileName = `PORT26_${state.selectedCollection}_${new Date().toISOString().split('T')[0]}.xlsx`;
+        
+        // Save file
+        XLSX.writeFile(wb, fileName);
+        
+        hideProgress();
+        
+        // Show success message
+        const skippedCount = state.documents.length - excelData.length + 1; // +1 for header
+        let message = `${excelData.length - 1} records exported successfully`;
+        if (skippedCount > 0) {
+            message += `. ${skippedCount} records skipped (contained only image data)`;
+        }
+        showSuccess(message);
+        
+    } catch (error) {
+        hideProgress();
+        console.error('Excel export error:', error);
+        showError('Failed to export Excel: ' + error.message);
+    }
+}
+
+// Download all collections merged into a single sheet
+async function downloadAllCollections() {
+    if (!state.selectedDb) {
+        alert('Please select a database first');
+        return;
+    }
+
+    try {
+        showProgress('Scanning database...', `Fetching collections from ${state.selectedDb}`);
+        
+        // Fetch all collections if not already loaded
+        let collections = state.collections;
+        if (collections.length === 0) {
+            const response = await fetch(`${API_BASE_URL}/databases/${state.selectedDb}/collections`);
+            if (!response.ok) throw new Error('Failed to fetch collections');
+            collections = await response.json();
+        }
+
+        if (collections.length === 0) {
+            hideProgress();
+            alert('No collections found in this database');
+            return;
+        }
+
+        // Prepare merged data for Excel (single sheet)
+        const mergedExcelData = [];
+        let totalDocs = 0;
+        let processedDocs = 0;
+        let collectionsProcessed = 0;
+        let allKeys = new Set();
+        let collectionDocs = [];
+
+        // First pass: collect all documents and identify all possible fields
+        updateProgress(5, 'Analyzing collections...');
+        
+        for (const collection of collections) {
+            try {
+                const response = await fetch(
+                    `${API_BASE_URL}/databases/${state.selectedDb}/collections/${collection}/documents`
+                );
+                if (response.ok) {
+                    const docs = await response.json();
+                    
+                    // Sort documents by registration ID
+                    const sortedDocs = sortByRegistrationId(docs);
+                    
+                    // Filter out image fields and collect all keys
+                    sortedDocs.forEach(doc => {
+                        // Filter out image fields
+                        const filteredDoc = {};
+                        Object.entries(doc).forEach(([key, value]) => {
+                            if (!isImageField(key, value) && 
+                                !key.toLowerCase().includes('image') && 
+                                !key.toLowerCase().includes('photo') && 
+                                !key.toLowerCase().includes('screenshot') &&
+                                !key.toLowerCase().includes('picture') &&
+                                !key.toLowerCase().includes('img') &&
+                                !key.toLowerCase().includes('base64')) {
+                                
+                                filteredDoc[key] = value;
+                                allKeys.add(key);
+                            }
+                        });
+                        
+                        // Only add if document has non-image data
+                        if (Object.keys(filteredDoc).length > 0) {
+                            // Add collection name as source
+                            filteredDoc._sourceCollection = collection;
+                            collectionDocs.push(filteredDoc);
+                        }
+                    });
+                    
+                    totalDocs += sortedDocs.length;
+                }
+            } catch (e) {
+                console.warn(`Could not fetch data for ${collection}:`, e);
+            }
+        }
+
+        // Add source collection to keys if not already present
+        allKeys.add('_sourceCollection');
+        
+        // Convert allKeys to array and sort
+        const headers = Array.from(allKeys).map(key => {
+            if (key === '_sourceCollection') return 'Source Collection';
+            return formatFieldName(key);
+        });
+        
+        // Add headers as first row
+        mergedExcelData.push(headers);
+
+        // Sort all documents by registration ID
+        const allSortedDocs = sortByRegistrationId(collectionDocs);
+
+        // Second pass: add data rows
+        updateProgress(30, 'Processing documents...');
+        
+        allSortedDocs.forEach((doc, index) => {
+            const row = [];
+            
+            Array.from(allKeys).forEach(key => {
+                const value = doc[key];
+                let cellValue = '';
+                
+                if (key === '_sourceCollection') {
+                    // Format collection name for source
+                    cellValue = formatCollectionName(value || '');
+                }
+                else if (value === null || value === undefined) {
+                    cellValue = '';
+                } 
+                else if (typeof value === 'object') {
+                    const str = JSON.stringify(value);
+                    cellValue = str.length > 500 ? str.substring(0, 500) + '...' : str;
+                }
+                else if (typeof value === 'string') {
+                    if (value.length > 32767) {
+                        cellValue = value.substring(0, 32760) + '...';
+                    } else {
+                        cellValue = value;
+                    }
+                }
+                else if (typeof value === 'boolean') {
+                    cellValue = value ? 'Yes' : 'No';
+                }
+                else {
+                    cellValue = String(value);
+                }
+                
+                row.push(cellValue);
+            });
+            
+            mergedExcelData.push(row);
+            
+            processedDocs++;
+            if (processedDocs % 20 === 0) {
+                updateProgress(
+                    30 + Math.round((processedDocs / totalDocs) * 60),
+                    `Processed ${processedDocs} of ${totalDocs} documents`
+                );
+            }
+        });
+
+        if (mergedExcelData.length <= 1) { // Only headers, no data
+            hideProgress();
+            showError('No data available to export');
+            return;
+        }
+
+        updateProgress(95, 'Creating Excel file...');
+
+        // Create workbook with single sheet
+        const wb = XLSX.utils.book_new();
+        const ws = XLSX.utils.aoa_to_sheet(mergedExcelData);
+        
+        // Auto-size columns
+        const colWidths = [];
+        mergedExcelData.forEach(row => {
+            row.forEach((cell, colIndex) => {
+                const length = String(cell).length;
+                colWidths[colIndex] = Math.min(Math.max(colWidths[colIndex] || 0, length), 50);
+            });
+        });
+        ws['!cols'] = colWidths.map(w => ({ wch: w + 2 }));
+        
+        // Add single worksheet
+        const sheetName = `${state.selectedDb}_all_data`.substring(0, 31);
+        XLSX.utils.book_append_sheet(wb, ws, sheetName);
+        
+        // Generate filename
+        const fileName = `PORT26_all_registrations_${new Date().toISOString().split('T')[0]}.xlsx`;
+        
+        // Save file
+        XLSX.writeFile(wb, fileName);
+        
+        hideProgress();
+        
+        // Show success message
+        const recordCount = mergedExcelData.length - 1; // Subtract header row
+        const collectionCount = collections.length;
+        let message = `✅ Successfully exported ${recordCount} records from ${collectionCount} collections into a single sheet`;
+        
+        // Add note about skipped image data
+        if (totalDocs > recordCount) {
+            message += `\n📸 ${totalDocs - recordCount} records with only image data were skipped`;
+        }
+        
+        // Add note about source collection column
+        message += `\n📌 Added 'Source Collection' column to identify the original table`;
+        
+        showSuccess(message);
+        
+    } catch (error) {
+        hideProgress();
+        console.error('Excel export error:', error);
+        showError('Failed to export all collections: ' + error.message);
+    }
+}
+
+        // Show success message
+        function showSuccess(message) {
+            const successDiv = document.createElement('div');
+            successDiv.className = 'bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded-lg mb-4';
+            successDiv.setAttribute('role', 'alert');
+            successDiv.innerHTML = `
+                <div class="flex items-center gap-2">
+                    <i class="fas fa-check-circle text-green-500"></i>
+                    <span>${message}</span>
+                </div>
+            `;
+            
+            // Remove any existing success messages
+            const existingSuccess = document.querySelector('.success-message');
+            if (existingSuccess) existingSuccess.remove();
+            
+            successDiv.classList.add('success-message');
+            contentArea.insertBefore(successDiv, contentArea.firstChild);
+            
+            // Auto remove after 5 seconds
+            setTimeout(() => {
+                successDiv.remove();
+            }, 5000);
+        }
+
+        // Render document details with image support
+        function renderDocumentDetails() {
+            if (!state.documentDetails) return;
+            
+            const doc = state.documentDetails;
+            const displayName = getDisplayName(doc);
+            const regId = getRegistrationId(doc);
+            
+            let html = `
+                <div class="candidate-details bg-white rounded-xl shadow-lg overflow-hidden">
+                    <div class="bg-gradient-to-r from-blue-600 to-blue-800 text-white px-6 py-4">
+                        <div class="flex justify-between items-center">
+                            <h2 class="text-xl font-semibold flex items-center gap-2">
+                                <i class="fas fa-file-alt"></i>
+                                ${formatCollectionName(state.selectedCollection)} Details
+                            </h2>
+                            ${regId ? `
+                                <span class="bg-white text-blue-800 px-3 py-1 rounded-full text-sm font-medium">
+                                    Reg: ${regId}
+                                </span>
+                            ` : ''}
+                        </div>
+                        <p class="text-blue-100 mt-1 flex items-center gap-2">
+                            <i class="fas fa-user"></i>
+                            ${displayName}
+                        </p>
+                    </div>
+                    
+                    <div class="p-6">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            `;
+            
+            // First, display all non-image fields
+            Object.entries(doc).forEach(([key, value]) => {
+                // Skip image fields and ID fields (already shown)
+                if (isImageField(key, value) || key === '_id' || key === 'id') return;
+                
+                // Format the value for display
+                let displayValue = formatValueForDisplay(value);
+                
+                html += `
+                    <div class="bg-gray-50 p-3 rounded-lg border border-gray-200">
+                        <div class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                            ${formatFieldName(key)}
+                        </div>
+                        <div class="text-gray-800 break-words">${displayValue}</div>
+                    </div>
+                `;
+            });
+            
+            html += `</div>`; // Close grid
+            
+            // Now handle image fields
+            const imageFields = findImageFields(doc);
+            
+            if (imageFields.length > 0) {
+                imageFields.forEach(field => {
+                    html += renderImageField(field.key, field.value);
+                });
+            }
+            
+            html += `
+                    </div>
+                </div>
+            `;
+            
+            candidateDetailsDiv.innerHTML = html;
+            showCandidateDetails();
+        }
+
+        // UI Helper functions
+        function showLoading() {
+            state.loading = true;
+            loadingCandidates.classList.remove('hidden');
+            loadingCandidates.classList.add('flex');
+        }
+
+        function hideLoading() {
+            state.loading = false;
+            loadingCandidates.classList.add('hidden');
+            loadingCandidates.classList.remove('flex');
+        }
+
+        function showPlaceholder(message) {
+            placeholder.classList.remove('hidden');
+            candidateDetailsDiv.classList.add('hidden');
+            if (message) {
+                placeholder.innerHTML = `
+                    <div class="placeholder-icon text-6xl mb-4 text-gray-400">
+                        <i class="fas fa-database"></i>
+                    </div>
+                    <div class="text-xl text-gray-600 mb-2">${message}</div>
+                `;
+            }
+        }
+
+        function hidePlaceholder() {
+            placeholder.classList.add('hidden');
+        }
+
+        function showCandidateDetails() {
+            candidateDetailsDiv.classList.remove('hidden');
+            placeholder.classList.add('hidden');
+            errorMessageDiv.classList.add('hidden');
+        }
+
+        function hideCandidateDetails() {
+            candidateDetailsDiv.classList.add('hidden');
+        }
+
+        function showError(message) {
+            state.error = message;
+            errorMessageDiv.innerHTML = `
+                <div class="flex items-center gap-2">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <span>${message}</span>
+                </div>
+            `;
+            errorMessageDiv.classList.remove('hidden');
+            placeholder.classList.add('hidden');
+            candidateDetailsDiv.classList.add('hidden');
+        }
+
+        // Auto-refresh timer variable
+let refreshInterval = null;
+
+// Function to start auto-refresh
+function startAutoRefresh(dbName, collectionName) {
+    // Clear any existing refresh interval
+    stopAutoRefresh();
+    
+    // Set new refresh interval (every 30 seconds)
+    refreshInterval = setInterval(async () => {
+        console.log('🔄 Auto-refreshing data...');
+        
+        try {
+            const response = await fetch(
+                `${API_BASE_URL}/databases/${dbName}/collections/${collectionName}/documents`
+            );
+            
+            if (response.ok) {
+                const data = await response.json();
+                const newDocs = sortByRegistrationId(data);
+                
+                // Check if data has changed
+                if (JSON.stringify(state.documents) !== JSON.stringify(newDocs)) {
+                    console.log('📊 Data updated! Refreshing view...');
+                    state.documents = newDocs;
+                    renderDocumentList();
+                    
+                    // Update collection title with new count
+                    const formattedName = formatCollectionName(collectionName);
+                    collectionTitle.innerHTML = `<i class="fas fa-table text-blue-500 mr-2"></i>${formattedName} <span class="text-sm font-normal text-gray-500 ml-2">(${state.documents.length})</span>`;
+                    candidateCount.textContent = state.documents.length;
+                    
+                    // Show subtle notification
+                    showRefreshNotification('Data updated automatically');
+                }
+            }
+        } catch (error) {
+            console.warn('Auto-refresh failed:', error.message);
+        }
+    }, 30000); // 30 seconds
+}
+
+// Function to stop auto-refresh
+function stopAutoRefresh() {
+    if (refreshInterval) {
+        clearInterval(refreshInterval);
+        refreshInterval = null;
+        console.log('⏹️ Auto-refresh stopped');
+    }
+}
+
+// Function to show refresh notification
+function showRefreshNotification(message) {
+    // Remove existing notification if any
+    const existingNotif = document.querySelector('.refresh-notification');
+    if (existingNotif) existingNotif.remove();
+    
+    // Create notification element
+    const notification = document.createElement('div');
+    notification.className = 'refresh-notification fixed top-20 right-4 bg-green-500 text-white px-4 py-2 rounded-lg shadow-lg z-50 flex items-center gap-2 animate-fade-in-down';
+    notification.innerHTML = `
+        <i class="fas fa-sync-alt fa-spin"></i>
+        <span>${message}</span>
+    `;
+    
+    document.body.appendChild(notification);
+    
+    // Auto remove after 2 seconds
+    setTimeout(() => {
+        notification.classList.add('animate-fade-out-up');
+        setTimeout(() => notification.remove(), 500);
+    }, 2000);
+}
+
+// Add CSS animations for notifications
+const style = document.createElement('style');
+style.textContent = `
+    @keyframes fadeInDown {
+        from {
+            opacity: 0;
+            transform: translateY(-20px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+    
+    @keyframes fadeOutUp {
+        from {
+            opacity: 1;
+            transform: translateY(0);
+        }
+        to {
+            opacity: 0;
+            transform: translateY(-20px);
+        }
+    }
+    
+    .animate-fade-in-down {
+        animation: fadeInDown 0.3s ease-out;
+    }
+    
+    .animate-fade-out-up {
+        animation: fadeOutUp 0.3s ease-out forwards;
+    }
+`;
+document.head.appendChild(style);
+
+        function hideError() {
+            errorMessageDiv.classList.add('hidden');
+        }
+
+        function clearCandidateList() {
+            candidateList.innerHTML = '';
+            candidateCount.textContent = '0';
+        }
+
+        // Close modal when clicking outside
+        window.onclick = function(event) {
+            if (event.target === imageModal) {
+                closeModal();
+            }
+        }
+
+        // Initialize the app when page loads
+        document.addEventListener('DOMContentLoaded', init);
+
+        // Make functions available globally
+        window.handleDatabaseChange = handleDatabaseChange;
+        window.handleCollectionChange = handleCollectionChange;
+        window.openImageInModal = openImageInModal;
+        window.closeModal = closeModal;
+        window.downloadImage = downloadImage;
+        window.downloadCurrentCollection = downloadCurrentCollection;
+        window.downloadAllCollections = downloadAllCollections;
+    </script>
+</body>
+
+</html>
